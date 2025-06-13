@@ -133,6 +133,71 @@ def api_current_user():
         })
     return jsonify({'error': 'User not found'}), 404
 
+@app.route('/api/get_suggestions')
+@login_required
+def api_get_suggestions():
+    """Get autocomplete suggestions from Google Sheets"""
+    try:
+        column = request.args.get('column', 'MAWB')
+        query = request.args.get('q', '')
+        
+        suggestions = sheets_client.get_suggestions(column, query)
+        return jsonify({'suggestions': suggestions})
+        
+    except Exception as e:
+        logging.error(f"Suggestions error: {str(e)}")
+        return jsonify({'suggestions': []})
+
+@app.route('/api/update_ramp_data', methods=['POST'])
+@login_required
+def api_update_ramp_data():
+    """Update ramp data in Google Sheets"""
+    try:
+        data = request.get_json()
+        mawb = data.get('mawb')
+        received_pieces = data.get('received_pieces')
+        
+        if not mawb or not received_pieces:
+            return jsonify({'success': False, 'message': 'MAWB and received pieces are required'}), 400
+        
+        # Update Google Sheets
+        result = sheets_client.update_ramp_data(mawb, received_pieces, session.get('employee_id'))
+        
+        if result['success']:
+            return jsonify({'success': True, 'message': 'Ramp data updated successfully'})
+        else:
+            return jsonify({'success': False, 'message': result['message']}), 400
+            
+    except Exception as e:
+        logging.error(f"Ramp update error: {str(e)}")
+        return jsonify({'success': False, 'message': 'Failed to update ramp data'}), 500
+
+@app.route('/api/update_towing_data', methods=['POST'])
+@login_required
+def api_update_towing_data():
+    """Update towing data in Google Sheets"""
+    try:
+        data = request.get_json()
+        flight_number = data.get('flight_number')
+        mawb = data.get('mawb')
+        bt_number = data.get('bt_number')
+        bt_arrival = data.get('bt_arrival')
+        
+        if not all([flight_number, mawb, bt_number]):
+            return jsonify({'success': False, 'message': 'Flight number, MAWB, and BT number are required'}), 400
+        
+        # Update Google Sheets
+        result = sheets_client.update_towing_data(flight_number, mawb, bt_number, bt_arrival, session.get('employee_id'))
+        
+        if result['success']:
+            return jsonify({'success': True, 'message': 'BT delivery recorded successfully'})
+        else:
+            return jsonify({'success': False, 'message': result['message']}), 400
+            
+    except Exception as e:
+        logging.error(f"Towing update error: {str(e)}")
+        return jsonify({'success': False, 'message': 'Failed to update towing data'}), 500
+
 @app.route('/api/start_scrape', methods=['POST'])
 @login_required
 def api_start_scrape():
@@ -248,184 +313,5 @@ def stream_scrape_updates():
     
     return Response(generate(), mimetype='text/event-stream')
 
-@app.route('/api/get_flight_numbers', methods=['GET'])
-@login_required
-def api_get_flight_numbers():
-    """Fetch flight numbers for dropdown from Google Sheets"""
-    try:
-        query = request.args.get('q', '').strip()
-        flight_numbers = sheets_client.get_flight_numbers(query)
-        return jsonify({'success': True, 'flight_numbers': flight_numbers})
-    except Exception as e:
-        logging.error(f"Error fetching flight numbers: {str(e)}")
-        return jsonify({'success': False, 'message': 'Failed to fetch flight numbers', 'flight_numbers': []}), 500
-
-@app.route('/api/get_mawb_numbers', methods=['GET'])
-@login_required
-def api_get_mawb_numbers():
-    """Fetch MAWB numbers for dropdown from Google Sheets"""
-    try:
-        flight_number = request.args.get('flight_number', '').strip()
-        query = request.args.get('q', '').strip()
-        
-        mawb_numbers = sheets_client.get_mawb_numbers(flight_number, query)
-        return jsonify({'success': True, 'mawb_numbers': mawb_numbers})
-    except Exception as e:
-        logging.error(f"Error fetching MAWB numbers: {str(e)}")
-        return jsonify({'success': False, 'message': 'Failed to fetch MAWB numbers', 'mawb_numbers': []}), 500
-
-@app.route('/api/get_suggestions')
-@login_required
-def api_get_suggestions():
-    """Get autocomplete suggestions from Google Sheets"""
-    try:
-        column = request.args.get('column', 'MAWB')
-        query = request.args.get('q', '')
-        
-        suggestions = sheets_client.get_suggestions(column, query)
-        return jsonify({'success': True, 'suggestions': suggestions})
-        
-    except Exception as e:
-        logging.error(f"Suggestions error: {str(e)}")
-        return jsonify({'success': False, 'suggestions': []})
-
-# NEW: Missing validate_mawb endpoint
-@app.route('/api/validate_mawb')
-@login_required
-def api_validate_mawb():
-    """Validate MAWB and return shipment details"""
-    try:
-        mawb = request.args.get('mawb', '').strip().upper()
-        
-        if not mawb:
-            return jsonify({'success': False, 'message': 'MAWB number is required'})
-        
-        # Get all data from sheets
-        data = sheets_client.get_all_data()
-        
-        # Find the MAWB
-        mawb_data = None
-        for row in data:
-            if str(row.get('MAWB', '')).strip().upper() == mawb:
-                mawb_data = row
-                break
-        
-        if mawb_data:
-            # Format the response data
-            response_data = {
-                'flight_number': mawb_data.get('FLT NO', ''),
-                'pieces': mawb_data.get('AWB PCS', ''),
-                'weight': mawb_data.get('GW', ''),
-                'current_received_pieces': mawb_data.get('RCVD PCS', 0),
-                'origin': mawb_data.get('ORIGIN', ''),
-                'destination': mawb_data.get('DEST', ''),
-                'commodity': mawb_data.get('COMODITY', ''),
-            }
-            
-            return jsonify({
-                'success': True,
-                'mawb_data': response_data,
-                'message': 'MAWB found'
-            })
-        else:
-            return jsonify({
-                'success': False,
-                'message': f'MAWB {mawb} not found in the system'
-            })
-            
-    except Exception as e:
-        logging.error(f"MAWB validation error: {str(e)}")
-        return jsonify({
-            'success': False,
-            'message': 'Error validating MAWB'
-        })
-
-@app.route('/api/update_ramp_data', methods=['POST'])
-@login_required
-def api_update_ramp_data():
-    """Update ramp data in Google Sheets"""
-    try:
-        data = request.get_json()
-        mawb = data.get('mawb', '').strip()
-        received_pieces = data.get('received_pieces')
-        
-        if not mawb or not received_pieces:
-            return jsonify({'success': False, 'message': 'MAWB and received pieces are required'}), 400
-        
-        # Validate received_pieces is a positive integer
-        try:
-            received_pieces = int(received_pieces)
-            if received_pieces <= 0:
-                return jsonify({'success': False, 'message': 'Received pieces must be a positive number'}), 400
-        except (ValueError, TypeError):
-            return jsonify({'success': False, 'message': 'Received pieces must be a valid number'}), 400
-        
-        # Update Google Sheets
-        result = sheets_client.update_ramp_data(mawb, received_pieces, session.get('employee_id'))
-        
-        if result['success']:
-            return jsonify({'success': True, 'message': f'Updated {received_pieces} pieces for MAWB {mawb}'})
-        else:
-            return jsonify({'success': False, 'message': result['message']}), 400
-            
-    except Exception as e:
-        logging.error(f"Ramp update error: {str(e)}")
-        return jsonify({'success': False, 'message': 'Failed to update ramp data'}), 500
-
-@app.route('/api/update_towing_data', methods=['POST'])
-@login_required
-def api_update_towing_data():
-    """Update towing data in Google Sheets"""
-    try:
-        data = request.get_json()
-        flight_number = data.get('flight_number', '').strip()
-        mawb = data.get('mawb', '').strip()
-        bt_number = data.get('bt_number', '').strip()
-        bt_arrival = data.get('bt_arrival')  # This should be current timestamp
-        
-        if not all([flight_number, mawb, bt_number]):
-            return jsonify({'success': False, 'message': 'Flight number, MAWB, and BT number are required'}), 400
-        
-        # Update Google Sheets
-        result = sheets_client.update_towing_data(flight_number, mawb, bt_number, bt_arrival, session.get('employee_id'))
-        
-        if result['success']:
-            return jsonify({'success': True, 'message': f'BT {bt_number} delivery recorded for MAWB {mawb}'})
-        else:
-            return jsonify({'success': False, 'message': result['message']}), 400
-            
-    except Exception as e:
-        logging.error(f"Towing update error: {str(e)}")
-        return jsonify({'success': False, 'message': 'Failed to update towing data'}), 500
-
-@app.route('/api/sheets_status')
-@login_required
-def api_sheets_status():
-    """Check Google Sheets connection status"""
-    try:
-        user = get_user_by_employee_id(session.get('employee_id'))
-        if not user or user.team != 'admin':
-            return jsonify({'success': False, 'message': 'Admin privileges required'}), 403
-        
-        # Try to get sheet URL and basic info
-        sheet_url = sheets_client.get_sheet_url()
-        data_count = len(sheets_client.get_all_data())
-        
-        return jsonify({
-            'success': True,
-            'connected': True,
-            'sheet_url': sheet_url,
-            'data_count': data_count,
-            'message': f'Connected to Google Sheets with {data_count} records'
-        })
-        
-    except Exception as e:
-        logging.error(f"Sheets status check error: {str(e)}")
-        return jsonify({
-            'success': False,
-            'connected': False,
-            'message': f'Google Sheets connection failed: {str(e)}'
-        }), 500
-    
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

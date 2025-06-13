@@ -2,8 +2,10 @@ import gspread
 from google.oauth2.service_account import Credentials
 import pandas as pd
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
+import logging
 import os
+from pytz import timezone
 
 class GoogleSheetsClient:
     def __init__(self, credentials_file="gcp-creds.json", sheet_name="Merlin 2.0"):
@@ -262,7 +264,11 @@ class GoogleSheetsClient:
             
             # Update BT ARR column if bt_arrival is provided (column C)
             if bt_arrival:
-                arrival_time = datetime.fromisoformat(bt_arrival.replace('Z', '+00:00')).strftime('%H%M')
+                # Remove 'Z' and parse as naive UTC time, then add 8 hours for Singapore time
+                cleaned_iso = bt_arrival.replace('Z', '')
+                parsed_time = datetime.fromisoformat(cleaned_iso)
+                singapore_time_obj = parsed_time + timedelta(hours=8)
+                arrival_time = singapore_time_obj.strftime('%H%M')
                 self.worksheet.update_cell(row_num, 3, arrival_time)  # Column C (BT ARR)
             
             logging.info(f"Updated MAWB {mawb} BT number to {bt_number} by {employee_id}")
@@ -295,6 +301,35 @@ class GoogleSheetsClient:
         except Exception as e:
             logging.error(f"Error updating scraped data for MAWB {mawb}: {str(e)}")
             return {'success': False, 'message': f'Failed to update: {str(e)}'}
+    '''
+    def update_bt_arrival(self, mawb, bt_arrival):
+        """Update BT ARR column with Singapore time in HHMM format from ISO timestamp"""
+        try:
+            if not self.worksheet:
+                if not self._init_connection():
+                    return {'success': False, 'message': 'Failed to connect to Google Sheets'}
+
+            row_num = self.find_row_by_mawb(mawb)
+            if not row_num:
+                return {'success': False, 'message': f'MAWB {mawb} not found in sheet'}
+
+            # Remove 'Z' and parse as naive UTC time, then add 8 hours
+            cleaned_iso = bt_arrival.replace('Z', '')
+            parsed_time = datetime.fromisoformat(cleaned_iso)
+            singapore_time_obj = parsed_time + timedelta(hours=8)
+            singapore_time = singapore_time_obj.strftime('%H%M')
+
+            # Update BT ARR column (column C)
+            self.worksheet.update_cell(row_num, 3, singapore_time)
+
+            logging.info(f"Updated BT ARR for MAWB {mawb} to {singapore_time}")
+            return {'success': True, 'message': f'Updated BT ARR for MAWB {mawb}'}
+
+        except Exception as e:
+            logging.error(f"Error updating BT ARR for MAWB {mawb}: {str(e)}")
+            return {'success': False, 'message': f'Failed to update: {str(e)}'}
+    '''
+
     
     def get_sheet_url(self):
         """Get the URL of the Google Sheet"""
