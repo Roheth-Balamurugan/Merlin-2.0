@@ -1,0 +1,173 @@
+{% extends "layout.html" %}
+
+{% block title %}Login - Merlin{% endblock %}
+
+{% block content %}
+<div class="text-center mb-5">
+    <i data-feather="truck" style="width: 64px; height: 64px;" class="text-primary"></i>
+    <h1 class="mt-3">Merlin Logistics Hub</h1>
+    <p class="text-muted">Select your team to continue</p>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="row g-4">
+            <!-- Ramp Team Card -->
+            <div class="col-md-6">
+                <div class="card h-100 team-card" onclick="selectTeam('ramp')">
+                    <div class="card-body text-center">
+                        <i data-feather="package" style="width: 48px; height: 48px;" class="text-primary mb-3"></i>
+                        <h4>Ramp Team</h4>
+                        <p class="text-muted">Handle MAWB tracking and received pieces</p>
+                        <ul class="list-unstyled text-start mt-3">
+                            <li><i data-feather="check" class="me-2 text-success"></i>MAWB Processing</li>
+                            <li><i data-feather="check" class="me-2 text-success"></i>Received Pieces Tracking</li>
+                            <li><i data-feather="check" class="me-2 text-success"></i>Barcode Scanning</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Towing Team Card -->
+            <div class="col-md-6">
+                <div class="card h-100 team-card" onclick="selectTeam('towing')">
+                    <div class="card-body text-center">
+                        <i data-feather="truck" style="width: 48px; height: 48px;" class="text-warning mb-3"></i>
+                        <h4>Towing Team</h4>
+                        <p class="text-muted">Manage flight numbers, MAWB, and BT delivery tracking</p>
+                        <ul class="list-unstyled text-start mt-3">
+                            <li><i data-feather="check" class="me-2 text-success"></i>Flight Number Tracking</li>
+                            <li><i data-feather="check" class="me-2 text-success"></i>MAWB Processing</li>
+                            <li><i data-feather="check" class="me-2 text-success"></i>BT Arrival Logging</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Admin Access -->
+        <div class="row justify-content-center mt-4">
+            <div class="col-md-6">
+                <div class="card team-card" onclick="selectTeam('admin')">
+                    <div class="card-body text-center">
+                        <i data-feather="settings" style="width: 32px; height: 32px;" class="text-danger mb-2"></i>
+                        <h5>Admin Panel</h5>
+                        <p class="text-muted mb-0">Scraper administration and system management</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Login Modal -->
+<div class="modal fade" id="loginModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="loginModalTitle">Team Login</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="loginForm">
+                    <input type="hidden" id="selected_team" name="selected_team">
+                    <div class="mb-3">
+                        <label for="employee_id" class="form-label">Employee ID</label>
+                        <input type="text" class="form-control" id="employee_id" name="employee_id" required 
+                               placeholder="Enter your employee ID" autocomplete="username">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="password" class="form-label">Password</label>
+                        <input type="password" class="form-control" id="password" name="password" required 
+                               placeholder="Enter your password" autocomplete="current-password">
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary w-100" id="loginBtn">
+                        <span class="spinner-border spinner-border-sm me-2 d-none" id="loginSpinner"></span>
+                        Login
+                    </button>
+                </form>
+                
+                <div class="mt-4">
+                    <small class="text-muted">
+                        <strong>Demo Accounts:</strong><br>
+                        Admin: admin / admin123<br>
+                        Ramp: ramp001 / ramp123<br>
+                        Towing: towing001 / towing123
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let selectedTeam = '';
+
+function selectTeam(team) {
+    selectedTeam = team;
+    document.getElementById('selected_team').value = team;
+    
+    // Update modal title
+    const modalTitle = document.getElementById('loginModalTitle');
+    modalTitle.textContent = `${team.charAt(0).toUpperCase() + team.slice(1)} Team Login`;
+    
+    // Show login modal
+    const modal = new bootstrap.Modal(document.getElementById('loginModal'));
+    modal.show();
+}
+
+document.getElementById('loginForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const loginBtn = document.getElementById('loginBtn');
+    const loginSpinner = document.getElementById('loginSpinner');
+    const employeeId = document.getElementById('employee_id').value;
+    const password = document.getElementById('password').value;
+    
+    // Show loading state
+    loginBtn.disabled = true;
+    loginSpinner.classList.remove('d-none');
+    
+    try {
+        const response = await fetch('/api/login', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                employee_id: employeeId,
+                password: password,
+                selected_team: selectedTeam
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            // Redirect based on selected team
+            if (selectedTeam === 'admin') {
+                window.location.href = '/admin';
+            } else if (selectedTeam === 'towing') {
+                window.location.href = '/towing';
+            } else {
+                window.location.href = '/ramp';
+            }
+        } else {
+            showAlert(data.message || 'Login failed', 'error');
+        }
+        
+    } catch (error) {
+        console.error('Login error:', error);
+        showAlert('Network error. Please try again.', 'error');
+    } finally {
+        // Hide loading state
+        loginBtn.disabled = false;
+        loginSpinner.classList.add('d-none');
+    }
+});
+</script>
+{% endblock %}

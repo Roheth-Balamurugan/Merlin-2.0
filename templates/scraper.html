@@ -1,0 +1,89 @@
+{% extends "layout.html" %}
+
+{% block title %}Scraper Admin - Merlin{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1><i data-feather="search" class="me-2"></i>Scraper Admin</h1>
+            <span class="badge bg-warning text-dark">Admin Access</span>
+        </div>
+        
+        <!-- File Upload Section -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title"><i data-feather="upload" class="me-2"></i>Upload MAWB File</h5>
+                <p class="text-muted">Upload an Excel (.xlsx, .xls) or CSV file containing MAWB numbers to scrape tracking data.</p>
+                
+                <form id="uploadForm">
+                    <div class="mb-3">
+                        <label for="file" class="form-label">Select File</label>
+                        <input type="file" class="form-control" id="file" name="file" 
+                               accept=".xlsx,.xls,.csv" required>
+                        <div class="form-text">Supported formats: Excel (.xlsx, .xls) and CSV (.csv)</div>
+                    </div>
+                    
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary" id="uploadBtn">
+                            <span class="spinner-border spinner-border-sm me-2 d-none" id="uploadSpinner"></span>
+                            Upload File
+                        </button>
+                        <button type="button" class="btn btn-success d-none" id="startScrapeBtn" onclick="startScraping()">
+                            <i data-feather="play" class="me-2"></i>
+                            Start Scraping
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Progress Section -->
+        <div class="card mb-4 d-none" id="progressCard">
+            <div class="card-body">
+                <h5 class="card-title"><i data-feather="activity" class="me-2"></i>Scraping Progress</h5>
+                <div class="progress mb-3">
+                    <div class="progress-bar" id="progressBar" role="progressbar" style="width: 0%"></div>
+                </div>
+                <div class="d-flex justify-content-between">
+                    <span id="progressText">Ready to start</span>
+                    <span id="progressCount">0 / 0</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Results Section -->
+        <div class="card" id="resultsCard">
+            <div class="card-body">
+                <h5 class="card-title"><i data-feather="list" class="me-2"></i>Scraping Results</h5>
+                <div class="table-responsive">
+                    <table class="table table-striped" id="resultsTable">
+                        <thead>
+                            <tr>
+                                <th>MAWB</th>
+                                <th>Status</th>
+                                <th>Location</th>
+                                <th>Carrier</th>
+                                <th>Last Update</th>
+                                <th>Sheet Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="resultsBody">
+                            <tr>
+                                <td colspan="6" class="text-center text-muted">
+                                    <i data-feather="inbox" class="me-2"></i>
+                                    No results yet. Upload a file and start scraping to see results.
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/scraper.js') }}"></script>
+{% endblock %}
