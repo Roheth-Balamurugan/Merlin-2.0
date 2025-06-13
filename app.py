@@ -133,20 +133,29 @@ def api_current_user():
         })
     return jsonify({'error': 'User not found'}), 404
 
-@app.route('/api/get_suggestions')
+@app.route('/api/get_suggestions', methods=['GET'])
 @login_required
 def api_get_suggestions():
     """Get autocomplete suggestions from Google Sheets"""
     try:
         column = request.args.get('column', 'MAWB')
         query = request.args.get('q', '')
-        
-        suggestions = sheets_client.get_suggestions(column, query)
-        return jsonify({'suggestions': suggestions})
-        
+        limit = int(request.args.get('limit', 50))
+        flight_number = request.args.get('flight', '').strip()  # Added flight parameter
+
+        if column.lower() == 'mawb':
+            suggestions = sheets_client.get_mawb_numbers(flight_number=flight_number, query=query)
+        else:
+            suggestions = sheets_client.get_suggestions(column, query)
+
+        return jsonify({
+            'success': True,
+            'suggestions': suggestions[:limit]
+        })
+
     except Exception as e:
         logging.error(f"Suggestions error: {str(e)}")
-        return jsonify({'suggestions': []})
+        return jsonify({'success': False, 'suggestions': [], 'message': 'Failed to fetch suggestions'})
 
 @app.route('/api/update_ramp_data', methods=['POST'])
 @login_required
@@ -312,6 +321,20 @@ def stream_scrape_updates():
             yield f"data: {json.dumps({'type': 'error', 'status': f'Streaming error: {str(e)}'})}\n\n"
     
     return Response(generate(), mimetype='text/event-stream')
+
+@app.route('/api/validate_flight', methods=['GET'])
+def validate_flight():
+    flight = request.args.get('flight', '').strip()
+    if not flight:
+        return jsonify({'success': False, 'message': 'Flight parameter is required'}), 400
+
+    try:
+        client = GoogleSheetsClient()
+        result = client.validate_flight(flight)
+        return jsonify(result)
+    except Exception as e:
+        logging.error(f"Error validating flight: {str(e)}")
+        return jsonify({'success': False, 'message': f'Error validating flight: {str(e)}'}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

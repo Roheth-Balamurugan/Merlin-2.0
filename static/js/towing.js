@@ -1,4 +1,4 @@
-// Towing Operations JavaScript with Enhanced Functionality
+// Enhanced Towing Operations JavaScript with Improved Flight-MAWB Filtering
 
 document.addEventListener('DOMContentLoaded', function() {
     const towingForm = document.getElementById('towingForm');
@@ -70,6 +70,9 @@ async function handleTowingSubmit(event) {
             hideFlightDetails();
             hideMawbDetails();
             
+            // Clear MAWB datalist when form is reset
+            clearMawbDatalist();
+            
             // Focus on first input
             const firstInput = event.target.querySelector('input');
             if (firstInput) {
@@ -96,28 +99,50 @@ function initializeSmartInputs() {
     const mawbInput = document.getElementById('mawb');
     const btInput = document.getElementById('bt_number');
     
-    // Flight number input handling
+    // Flight number input handling with enhanced search
     if (flightInput) {
         let searchTimeout;
         flightInput.addEventListener('input', function() {
             clearTimeout(searchTimeout);
-            searchTimeout = setTimeout(() => {
-                const query = this.value.trim();
-                if (query.length >= 2) {
-                    searchFlightNumbers(query);
-                }
-            }, 300);
+            const query = this.value.trim();
             
             // Clear flight details when input changes
             hideFlightDetails();
             
+            // Clear MAWB input and suggestions when flight changes
+            if (mawbInput) {
+                mawbInput.value = '';
+                hideMawbDetails();
+                clearMawbDatalist();
+            }
+            
             // Remove validation classes on input
-            if (this.classList.contains('is-invalid') && this.value.trim()) {
+            if (this.classList.contains('is-invalid') && query) {
                 this.classList.remove('is-invalid');
+            }
+            
+            // Search for flight numbers with better debouncing
+            if (query.length >= 1) {
+                searchTimeout = setTimeout(() => {
+                    searchFlightNumbers(query);
+                }, 150); // Faster response for better UX
+            } else {
+                // Show all recent flights when input is empty but focused
+                searchTimeout = setTimeout(() => {
+                    loadRecentFlights();
+                }, 200);
             }
         });
         
-        // Validate flight on blur
+        // Show recent flights when input is focused and empty
+        flightInput.addEventListener('focus', function() {
+            const query = this.value.trim();
+            if (!query) {
+                loadRecentFlights();
+            }
+        });
+        
+        // Validate flight on blur and update MAWB suggestions
         flightInput.addEventListener('blur', function() {
             const flight = this.value.trim();
             if (flight) {
@@ -125,49 +150,75 @@ function initializeSmartInputs() {
             }
         });
         
-        // Handle flight selection from datalist
+        // Handle flight selection from datalist - KEY ENHANCEMENT
         flightInput.addEventListener('change', function() {
             const flight = this.value.trim();
             if (flight) {
                 validateFlight(flight);
+                // Update MAWB suggestions immediately when flight is selected
+                updateMawbSuggestionsForFlight(flight);
             }
         });
     }
     
-    // MAWB input handling
+    // MAWB input handling with flight-specific filtering - ENHANCED
     if (mawbInput) {
         let searchTimeout;
         mawbInput.addEventListener('input', function() {
             clearTimeout(searchTimeout);
-            searchTimeout = setTimeout(() => {
-                const query = this.value.trim();
-                if (query.length >= 2) {
-                    searchMAWBNumbers(query);
-                }
-            }, 300);
+            const query = this.value.trim();
+            const flightNumber = document.getElementById('flight_number')?.value.trim();
             
             // Clear MAWB details when input changes
             hideMawbDetails();
             
             // Remove validation classes on input
-            if (this.classList.contains('is-invalid') && this.value.trim()) {
+            if (this.classList.contains('is-invalid') && query) {
                 this.classList.remove('is-invalid');
+            }
+            
+            if (query.length >= 1) {
+                searchTimeout = setTimeout(() => {
+                    searchMAWBNumbers(query, flightNumber);
+                }, 200);
+            } else if (flightNumber) {
+                // Show all MAWBs for selected flight when input is empty
+                searchTimeout = setTimeout(() => {
+                    searchMAWBNumbers('', flightNumber);
+                }, 200);
+            }
+        });
+        
+        // Show flight-specific MAWBs when focused - ENHANCED
+        mawbInput.addEventListener('focus', function() {
+            const query = this.value.trim();
+            const flightNumber = document.getElementById('flight_number')?.value.trim();
+            
+            if (flightNumber) {
+                // Always show flight-specific MAWBs when focused
+                searchMAWBNumbers(query, flightNumber);
+            } else {
+                // If no flight selected, show message
+                showAlert('Please select a flight number first', 'info');
+                document.getElementById('flight_number')?.focus();
             }
         });
         
         // Validate MAWB on blur
         mawbInput.addEventListener('blur', function() {
             const mawb = this.value.trim();
+            const flightNumber = document.getElementById('flight_number')?.value.trim();
             if (mawb) {
-                validateMAWB(mawb);
+                validateMAWB(mawb, flightNumber);
             }
         });
         
         // Handle MAWB selection from datalist
         mawbInput.addEventListener('change', function() {
             const mawb = this.value.trim();
+            const flightNumber = document.getElementById('flight_number')?.value.trim();
             if (mawb) {
-                validateMAWB(mawb);
+                validateMAWB(mawb, flightNumber);
             }
         });
     }
@@ -194,34 +245,61 @@ function initializeSmartInputs() {
     }
 }
 
+// NEW FUNCTION: Update MAWB suggestions when flight is selected
+async function updateMawbSuggestionsForFlight(flightNumber) {
+    try {
+        const mawbInput = document.getElementById('mawb');
+        if (!mawbInput || !flightNumber) return;
+        
+        // Clear current MAWB value and show loading state
+        mawbInput.value = '';
+        mawbInput.placeholder = 'Loading MAWBs for flight...';
+        
+        // Load MAWBs specific to this flight
+        await searchMAWBNumbers('', flightNumber);
+        
+        // Reset placeholder
+        mawbInput.placeholder = 'Enter or scan MAWB number';
+        
+        // Show info about available MAWBs
+        const datalist = document.getElementById('mawb-datalist');
+        if (datalist) {
+            const optionCount = datalist.querySelectorAll('option').length;
+            if (optionCount > 0) {
+                showAlert(`${optionCount} MAWBs available for flight ${flightNumber}`, 'info');
+            } else {
+                showAlert(`No MAWBs found for flight ${flightNumber}`, 'warning');
+            }
+        }
+        
+    } catch (error) {
+        console.error('Error updating MAWB suggestions for flight:', error);
+        document.getElementById('mawb').placeholder = 'Enter or scan MAWB number';
+    }
+}
+
+// ENHANCED: Clear MAWB datalist
+function clearMawbDatalist() {
+    const datalist = document.getElementById('mawb-datalist');
+    if (datalist) {
+        datalist.innerHTML = '';
+    }
+}
+
 async function loadAllSuggestions() {
     try {
         await Promise.all([
-            populateDatalist('flight_number', 'Flight'),
-            populateDatalist('mawb', 'MAWB')
+            loadRecentFlights()
+            // Don't preload MAWB suggestions - they'll be loaded based on flight selection
         ]);
     } catch (error) {
         console.error('Error loading suggestions:', error);
     }
 }
 
-async function populateDatalist(inputId, column) {
+async function loadRecentFlights() {
     try {
-        const response = await fetch(`/api/get_suggestions?column=${column}&q=`);
-        const data = await response.json();
-        
-        const datalist = document.getElementById(`${inputId}-datalist`);
-        if (datalist && data.success && data.suggestions) {
-            updateDatalist(datalist, data.suggestions);
-        }
-    } catch (error) {
-        console.error(`Error populating ${column} datalist:`, error);
-    }
-}
-
-async function searchFlightNumbers(query) {
-    try {
-        const response = await fetch(`/api/get_suggestions?column=Flight&q=${encodeURIComponent(query)}`);
+        const response = await fetch(`/api/get_suggestions?column=Flight&q=&limit=50`);
         const data = await response.json();
         
         const datalist = document.getElementById('flight_number-datalist');
@@ -229,22 +307,118 @@ async function searchFlightNumbers(query) {
             updateDatalist(datalist, data.suggestions);
         }
     } catch (error) {
+        console.error('Error loading recent flights:', error);
+    }
+}
+
+async function searchFlightNumbers(query) {
+    try {
+        const response = await fetch(`/api/get_suggestions?column=Flight&q=${encodeURIComponent(query)}&limit=30`);
+        const data = await response.json();
+        
+        const datalist = document.getElementById('flight_number-datalist');
+        if (datalist && data.success && data.suggestions) {
+            // Sort suggestions by relevance (exact matches first, then partial matches)
+            const sortedSuggestions = sortFlightSuggestions(data.suggestions, query);
+            updateDatalist(datalist, sortedSuggestions);
+        }
+    } catch (error) {
         console.error('Error searching flight numbers:', error);
     }
 }
 
-async function searchMAWBNumbers(query) {
+// ENHANCED: MAWB search with better flight filtering
+async function searchMAWBNumbers(query, flightNumber = '') {
     try {
-        const response = await fetch(`/api/get_suggestions?column=MAWB&q=${encodeURIComponent(query)}`);
+        let url = `/api/get_suggestions?column=MAWB&q=${encodeURIComponent(query)}&limit=50`;
+        if (flightNumber) {
+            url += `&flight=${encodeURIComponent(flightNumber)}`;
+        }
+        
+        const response = await fetch(url);
         const data = await response.json();
         
         const datalist = document.getElementById('mawb-datalist');
         if (datalist && data.success && data.suggestions) {
-            updateDatalist(datalist, data.suggestions);
+            // Sort MAWB suggestions by relevance
+            const sortedSuggestions = sortMawbSuggestions(data.suggestions, query);
+            updateDatalist(datalist, sortedSuggestions);
+            
+            // Log for debugging
+            console.log(`Found ${data.suggestions.length} MAWBs for flight ${flightNumber || 'any'}, query: "${query}"`);
         }
     } catch (error) {
         console.error('Error searching MAWB numbers:', error);
     }
+}
+
+// NEW FUNCTION: Sort MAWB suggestions by relevance
+function sortMawbSuggestions(suggestions, query) {
+    if (!query) return suggestions;
+    
+    const queryUpper = query.toUpperCase();
+    
+    return suggestions.sort((a, b) => {
+        const aUpper = a.toUpperCase();
+        const bUpper = b.toUpperCase();
+        
+        // Exact matches first
+        if (aUpper === queryUpper) return -1;
+        if (bUpper === queryUpper) return 1;
+        
+        // Starts with query
+        if (aUpper.startsWith(queryUpper) && !bUpper.startsWith(queryUpper)) return -1;
+        if (bUpper.startsWith(queryUpper) && !aUpper.startsWith(queryUpper)) return 1;
+        
+        // Contains query
+        const aIndex = aUpper.indexOf(queryUpper);
+        const bIndex = bUpper.indexOf(queryUpper);
+        
+        if (aIndex !== -1 && bIndex === -1) return -1;
+        if (bIndex !== -1 && aIndex === -1) return 1;
+        
+        // If both contain query, sort by position
+        if (aIndex !== -1 && bIndex !== -1) {
+            if (aIndex !== bIndex) return aIndex - bIndex;
+        }
+        
+        // Finally, alphabetical sort
+        return aUpper.localeCompare(bUpper);
+    });
+}
+
+function sortFlightSuggestions(suggestions, query) {
+    if (!query) return suggestions;
+    
+    const queryUpper = query.toUpperCase();
+    
+    return suggestions.sort((a, b) => {
+        const aUpper = a.toUpperCase();
+        const bUpper = b.toUpperCase();
+        
+        // Exact matches first
+        if (aUpper === queryUpper) return -1;
+        if (bUpper === queryUpper) return 1;
+        
+        // Starts with query
+        if (aUpper.startsWith(queryUpper) && !bUpper.startsWith(queryUpper)) return -1;
+        if (bUpper.startsWith(queryUpper) && !aUpper.startsWith(queryUpper)) return 1;
+        
+        // Contains query (for partial matches)
+        const aIndex = aUpper.indexOf(queryUpper);
+        const bIndex = bUpper.indexOf(queryUpper);
+        
+        if (aIndex !== -1 && bIndex === -1) return -1;
+        if (bIndex !== -1 && aIndex === -1) return 1;
+        
+        // If both contain query, sort by position
+        if (aIndex !== -1 && bIndex !== -1) {
+            if (aIndex !== bIndex) return aIndex - bIndex;
+        }
+        
+        // Finally, alphabetical sort
+        return aUpper.localeCompare(bUpper);
+    });
 }
 
 async function validateFlight(flight) {
@@ -259,11 +433,19 @@ async function validateFlight(flight) {
             showFlightDetails(result.flight_data);
             flightInput.classList.remove('is-invalid');
             flightInput.classList.add('is-valid');
+            
+            // Auto-update MAWB suggestions for this flight
+            setTimeout(() => {
+                updateMawbSuggestionsForFlight(flight);
+            }, 300);
         } else {
             // Flight is invalid
             hideFlightDetails();
             flightInput.classList.add('is-invalid');
             flightInput.classList.remove('is-valid');
+            
+            // Clear MAWB suggestions since flight is invalid
+            clearMawbDatalist();
             
             if (result.message) {
                 showAlert(result.message, 'warning');
@@ -275,9 +457,15 @@ async function validateFlight(flight) {
     }
 }
 
-async function validateMAWB(mawb) {
+// ENHANCED: MAWB validation with flight verification
+async function validateMAWB(mawb, flightNumber = '') {
     try {
-        const response = await fetch(`/api/validate_mawb?mawb=${encodeURIComponent(mawb)}`);
+        let url = `/api/validate_mawb?mawb=${encodeURIComponent(mawb)}`;
+        if (flightNumber) {
+            url += `&flight=${encodeURIComponent(flightNumber)}`;
+        }
+        
+        const response = await fetch(url);
         const result = await response.json();
         
         const mawbInput = document.getElementById('mawb');
@@ -287,6 +475,12 @@ async function validateMAWB(mawb) {
             showMawbDetails(result.mawb_data);
             mawbInput.classList.remove('is-invalid');
             mawbInput.classList.add('is-valid');
+            
+            // Verify flight match if both are provided
+            if (flightNumber && result.mawb_data.flight_number && 
+                result.mawb_data.flight_number !== flightNumber) {
+                showAlert(`Warning: MAWB ${mawb} belongs to flight ${result.mawb_data.flight_number}, not ${flightNumber}`, 'warning');
+            }
         } else {
             // MAWB is invalid
             hideMawbDetails();
@@ -295,6 +489,8 @@ async function validateMAWB(mawb) {
             
             if (result.message) {
                 showAlert(result.message, 'warning');
+            } else if (flightNumber) {
+                showAlert(`MAWB ${mawb} not found for flight ${flightNumber}`, 'warning');
             }
         }
     } catch (error) {
@@ -385,6 +581,9 @@ document.getElementById('towingForm')?.addEventListener('reset', function() {
     hideFlightDetails();
     hideMawbDetails();
     
+    // Clear MAWB datalist
+    clearMawbDatalist();
+    
     // Focus on first input
     const firstInput = this.querySelector('input');
     if (firstInput) {
@@ -458,7 +657,7 @@ document.addEventListener('keydown', function(event) {
     }
 });
 
-// Auto-complete enhancement for flight number
+// Enhanced auto-complete for flight number
 document.getElementById('flight_number')?.addEventListener('keydown', function(event) {
     if (event.key === 'Tab' || event.key === 'Enter') {
         const datalist = document.getElementById('flight_number-datalist');
@@ -469,25 +668,51 @@ document.getElementById('flight_number')?.addEventListener('keydown', function(e
         for (let option of options) {
             if (option.value.toUpperCase().startsWith(currentValue)) {
                 this.value = option.value;
+                // Trigger validation and MAWB update
+                setTimeout(() => {
+                    validateFlight(option.value);
+                    updateMawbSuggestionsForFlight(option.value);
+                }, 100);
                 break;
             }
         }
     }
 });
 
-// Auto-complete enhancement for MAWB
+// Enhanced auto-complete for MAWB
 document.getElementById('mawb')?.addEventListener('keydown', function(event) {
     if (event.key === 'Tab' || event.key === 'Enter') {
         const datalist = document.getElementById('mawb-datalist');
         const options = datalist.querySelectorAll('option');
         const currentValue = this.value.toUpperCase();
+        const flightNumber = document.getElementById('flight_number')?.value.trim();
         
         // Auto-complete with first matching option
         for (let option of options) {
             if (option.value.toUpperCase().startsWith(currentValue)) {
                 this.value = option.value;
+                // Trigger validation
+                setTimeout(() => validateMAWB(option.value, flightNumber), 100);
                 break;
             }
+        }
+    }
+});
+
+// ENHANCED: Monitor flight selection to update MAWB suggestions
+document.getElementById('flight_number')?.addEventListener('change', function() {
+    const flightNumber = this.value.trim();
+    
+    if (flightNumber) {
+        // Always update MAWB suggestions when flight changes
+        updateMawbSuggestionsForFlight(flightNumber);
+    } else {
+        // Clear MAWB suggestions if no flight selected
+        clearMawbDatalist();
+        const mawbInput = document.getElementById('mawb');
+        if (mawbInput) {
+            mawbInput.value = '';
+            hideMawbDetails();
         }
     }
 });
